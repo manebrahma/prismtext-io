@@ -1,6 +1,6 @@
 import io
 
-import google.generativeai as genai
+from google import genai
 import streamlit as st
 from PIL import Image, UnidentifiedImageError
 
@@ -9,10 +9,9 @@ PAGE_TITLE = "PrismText"
 MODEL_NAME = "gemini-2.5-flash"
 
 
-def get_configured_model(api_key: str) -> genai.GenerativeModel:
-    """Configure Gemini for the current request and return its model."""
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel(MODEL_NAME)
+def get_client(api_key: str) -> genai.Client:
+    """Create a Gemini client for the current request."""
+    return genai.Client(api_key=api_key)
 
 
 def extract_mermaid(markdown: str) -> str:
@@ -27,7 +26,7 @@ def extract_mermaid(markdown: str) -> str:
     return f"```mermaid\n{cleaned}\n```"
 
 
-def generate_diagram(model: genai.GenerativeModel, user_text: str) -> str:
+def generate_diagram(client: genai.Client, user_text: str) -> str:
     prompt = """
 You are an expert information designer. Convert the user's text into a concise,
 accurate Mermaid flowchart that conveys its processes, comparisons, and hierarchy.
@@ -41,13 +40,16 @@ Requirements:
 - Give nodes 2px borders and white text.
 - Return only one fenced Mermaid block, starting with ```mermaid and ending with ```.
 """
-    response = model.generate_content([prompt, user_text])
+    response = client.models.generate_content(
+        model=MODEL_NAME,
+        contents=[prompt, user_text],
+    )
     if not response.text:
         raise ValueError("Gemini returned no diagram content.")
     return extract_mermaid(response.text)
 
 
-def summarize_image(model: genai.GenerativeModel, image: Image.Image) -> str:
+def summarize_image(client: genai.Client, image: Image.Image) -> str:
     prompt = """
 You are a document analyst. Examine this infographic or diagram carefully.
 Extract its labels, values, relationships, hierarchy, and chronological flow into
@@ -55,7 +57,10 @@ a complete professional Markdown document. Use headings and bullet lists where
 they clarify the source. Do not invent details that are not visible. Return only
 the Markdown content, with no conversational preface.
 """
-    response = model.generate_content([prompt, image])
+    response = client.models.generate_content(
+        model=MODEL_NAME,
+        contents=[prompt, image],
+    )
     if not response.text:
         raise ValueError("Gemini returned no summary content.")
     return response.text
@@ -105,7 +110,7 @@ if visualize_clicked:
     else:
         try:
             with visual_column, st.spinner("Building visual structure..."):
-                diagram = generate_diagram(get_configured_model(api_key), user_text)
+                diagram = generate_diagram(get_client(api_key), user_text)
                 st.markdown(diagram)
         except Exception as error:
             visual_column.error(f"Diagram generation failed: {error}")
@@ -118,7 +123,7 @@ if uploaded_image is not None:
             st.sidebar.warning("Enter a Gemini API key to summarize the image.")
         else:
             with text_column, st.spinner("Extracting visual structure..."):
-                summary = summarize_image(get_configured_model(api_key), image)
+                summary = summarize_image(get_client(api_key), image)
                 st.markdown(summary)
     except UnidentifiedImageError:
         visual_column.error("The uploaded file is not a readable image.")
