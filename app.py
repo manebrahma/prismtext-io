@@ -6,7 +6,7 @@ from PIL import Image, UnidentifiedImageError
 
 
 PAGE_TITLE = "PrismText"
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-3.5-flash"
 
 
 def get_client(api_key: str) -> genai.Client:
