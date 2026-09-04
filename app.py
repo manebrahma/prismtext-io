@@ -120,12 +120,15 @@ for state_key, default_value in {
         st.session_state[state_key] = default_value
 
 secret_key = st.secrets.get("GEMINI_API_KEY", "")
-api_key = st.sidebar.text_input(
-    "Gemini API key",
-    value=secret_key,
-    type="password",
-    help="Used only for this Streamlit session unless supplied through Streamlit secrets.",
-)
+if secret_key:
+    api_key = secret_key
+    st.sidebar.success("Gemini is connected.")
+else:
+    api_key = st.sidebar.text_input(
+        "Gemini API key",
+        type="password",
+        help="Used only for this Streamlit session. Configure GEMINI_API_KEY in Streamlit secrets for deployment.",
+    )
 st.sidebar.divider()
 st.sidebar.caption("PrismText keeps your idea and its visual counterpart in one workspace.")
 
