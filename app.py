@@ -72,9 +72,52 @@ def load_image(uploaded_file: st.runtime.uploaded_file_manager.UploadedFile) -> 
         return source_image.convert("RGB")
 
 
+def clear_workspace() -> None:
+    st.session_state.source_text = ""
+    st.session_state.diagram = ""
+    st.session_state.summary = ""
+
+
+def load_example() -> None:
+    st.session_state.source_text = (
+        "Launch a product in three stages: validate customer demand, build the "
+        "minimum viable product, then measure adoption and improve."
+    )
+
+
 st.set_page_config(page_title=PAGE_TITLE, page_icon="P", layout="wide")
-st.title("PrismText")
-st.caption("Transform writing into visual structure, or reconstruct diagrams as clear text.")
+st.markdown(
+    """
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+        .stApp { background: #101419; color: #edf1f4; font-family: 'Manrope', sans-serif; }
+        [data-testid="stHeader"] { background: rgba(16, 20, 25, 0.94); }
+        [data-testid="stSidebar"] { background: #171c22; }
+        [data-testid="stSidebar"] > div:first-child { border-right: 1px solid #2b333c; }
+        .block-container { max-width: 1440px; padding: 4rem 2rem 2rem; }
+        .workspace-title { font-size: 1.25rem; font-weight: 800; letter-spacing: 0; margin: 0; }
+        .workspace-subtitle { color: #98a3ad; font-size: 0.85rem; margin: 0.2rem 0 1.25rem; }
+        .panel-label { color: #9ca8b3; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12rem; text-transform: uppercase; margin-bottom: 0.55rem; }
+        .panel { background: #171c22; border: 1px solid #2b333c; border-radius: 8px; padding: 1rem; min-height: 32rem; }
+        .empty-canvas { color: #6f7b86; text-align: center; padding: 8rem 1rem; font-size: 0.92rem; }
+        .stTextArea textarea { background: #171c22; border: 1px solid #36414b; border-radius: 7px; color: #edf1f4; font-family: 'DM Mono', monospace; font-size: 0.9rem; line-height: 1.6; }
+        .stTextArea textarea:focus { border-color: #67d3c3; box-shadow: 0 0 0 1px #67d3c3; }
+        .stButton > button { border-radius: 6px; font-weight: 700; min-height: 2.5rem; }
+        .stButton > button[kind="primary"] { background: #61cbb9; border-color: #61cbb9; color: #0f1a1c; }
+        .stDownloadButton > button { border-radius: 6px; }
+        .stFileUploader { border: 1px dashed #46525e; border-radius: 7px; padding: 0.25rem 0.75rem; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+for state_key, default_value in {
+    "source_text": "",
+    "diagram": "",
+    "summary": "",
+}.items():
+    if state_key not in st.session_state:
+        st.session_state[state_key] = default_value
 
 secret_key = st.secrets.get("GEMINI_API_KEY", "")
 api_key = st.sidebar.text_input(
@@ -83,24 +126,59 @@ api_key = st.sidebar.text_input(
     type="password",
     help="Used only for this Streamlit session unless supplied through Streamlit secrets.",
 )
+st.sidebar.divider()
+st.sidebar.caption("PrismText keeps your idea and its visual counterpart in one workspace.")
+
+title_column, actions_column = st.columns([8, 2])
+with title_column:
+    st.markdown('<p class="workspace-title">PrismText</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="workspace-subtitle">From rough notes to a clear visual argument.</p>',
+        unsafe_allow_html=True,
+    )
+with actions_column:
+    st.button("Clear", use_container_width=True, on_click=clear_workspace)
 
 text_column, visual_column = st.columns(2, gap="large")
 
 with text_column:
-    st.subheader("Text Canvas")
+    st.markdown('<p class="panel-label">Source</p>', unsafe_allow_html=True)
     user_text = st.text_area(
-        "Concept or process notes",
-        height=360,
-        placeholder="Example: Build locally, push to GitHub, then deploy to the cloud.",
+        "Write or paste your idea",
+        key="source_text",
+        height=410,
+        label_visibility="collapsed",
+        placeholder="Start with the message you want people to understand...",
     )
-    visualize_clicked = st.button("Create diagram", use_container_width=True)
+    helper_column, example_column = st.columns([3, 2])
+    with helper_column:
+        st.caption("Describe a process, comparison, or framework.")
+    with example_column:
+        st.button("Use example", use_container_width=True, on_click=load_example)
+    visualize_clicked = st.button("Generate visual", type="primary", use_container_width=True)
 
 with visual_column:
-    st.subheader("Visual Canvas")
+    st.markdown('<p class="panel-label">Visual</p>', unsafe_allow_html=True)
     uploaded_image = st.file_uploader(
-        "Upload an infographic or diagram",
+        "Import a diagram instead",
         type=["png", "jpg", "jpeg"],
+        key="uploaded_diagram",
     )
+
+    if not uploaded_image and not st.session_state.diagram:
+        st.markdown(
+            '<div class="panel"><div class="empty-canvas">Your generated visual will appear here.<br><br>Or import a diagram to turn it back into structured text.</div></div>',
+            unsafe_allow_html=True,
+        )
+    elif st.session_state.diagram:
+        st.markdown(st.session_state.diagram)
+        st.download_button(
+            "Download Mermaid source",
+            data=st.session_state.diagram,
+            file_name="prismtext-diagram.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
 
 if visualize_clicked:
     if not user_text.strip():
@@ -111,7 +189,8 @@ if visualize_clicked:
         try:
             with visual_column, st.spinner("Building visual structure..."):
                 diagram = generate_diagram(get_client(api_key), user_text)
-                st.markdown(diagram)
+                st.session_state.diagram = diagram
+                st.rerun()
         except Exception as error:
             visual_column.error(f"Diagram generation failed: {error}")
 
@@ -124,7 +203,9 @@ if uploaded_image is not None:
         else:
             with text_column, st.spinner("Extracting visual structure..."):
                 summary = summarize_image(get_client(api_key), image)
-                st.markdown(summary)
+                st.session_state.summary = summary
+            st.markdown("#### Extracted notes")
+            st.markdown(st.session_state.summary)
     except UnidentifiedImageError:
         visual_column.error("The uploaded file is not a readable image.")
     except Exception as error:
